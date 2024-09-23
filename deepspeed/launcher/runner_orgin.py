@@ -8,7 +8,10 @@ training jobs with DeepSpeed. By default this uses pdsh to parallel
 ssh into multiple worker nodes and launch all the necessary processes
 per rank for training.
 """
-
+# Mujica
+"""
+This launch adapts to MujicaChk and enables breakpoint restart
+"""
 import os
 import re
 import sys
@@ -384,11 +387,10 @@ def parse_num_nodes(str_num_nodes: str, elastic_training: bool):
 
     return min_nodes, max_nodes
 
-class EngineRecovery(Exception):
-    pass
 
-def init_launcher(args):
-    
+def main(args=None):
+    args = parse_args(args)
+
     if args.elastic_training:
         assert args.master_addr != "", "Master Addr is required when elastic training is enabled"
 
@@ -578,15 +580,6 @@ def init_launcher(args):
         time.sleep(1)
         sys.exit(1)
 
-    def sigRecovery_handler(signum, frame):
-        result.send_signal(signal.SIGINT)
-        time.sleep(0.1)
-        result.send_signal(signal.SIGTERM)
-        result_kill = subprocess.Popen(kill_cmd, env=env)
-        result_kill.wait()
-        time.sleep(1)
-        raise EngineRecovery
-
     if args.launcher == PDSH_LAUNCHER and multi_node_exec:
         signal.signal(signal.SIGINT, sigkill_handler)
         signal.signal(signal.SIGTERM, sigkill_handler)
@@ -597,20 +590,7 @@ def init_launcher(args):
     # actual error and traceback should have been printed in the subprocess, so in order to avoid
     # unnecessary noise we just quietly exit here with the same code as the subprocess
     if result.returncode > 0:
-        # sys.exit(result.returncode)
-        try:
-            sigRecovery_handler(signal.SIGTERM, None)
-        except EngineRecovery:
-            raise
-
-def main(args=None):
-    args = parse_args(args)
-    Job_finish = False
-    while not Job_finish:
-        try:
-            Job_finish = init_launcher(args)
-        except EngineRecovery:
-            Job_finish = False
+        sys.exit(result.returncode)
 
 
 if __name__ == "__main__":

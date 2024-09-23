@@ -10,6 +10,10 @@ deepspeed.launcher.launch is intended to be run on a single worker node and
 will spawn several worker sub-processes depending on how many devices/ranks
 are on the worker.
 """
+# Mujica
+"""
+This launch adapts to MujicaChk and enables breakpoint restart
+"""
 
 import sys
 import subprocess
@@ -128,7 +132,7 @@ def terminate_process_tree(pid):
     for p in alive:
         p.kill()
 
-class ReturnToMain(Exception):
+class EngineRecovery(Exception):
     pass
 
 def init_launcher(args):
@@ -336,7 +340,8 @@ def init_launcher(args):
                 terminate_process_tree(process.pid)
             except Exception:
                 pass
-        raise ReturnToMain
+        time.sleep(3)
+        raise EngineRecovery
 
     # pass SIGINT/SIGTERM to children if the parent is being terminated
     signal.signal(signal.SIGINT, sigkill_handler)
@@ -356,7 +361,7 @@ def init_launcher(args):
                     # sigkill_handler(signal.SIGTERM, None)  # not coming back
                     try:
                         sigRecovery_handler(signal.SIGTERM, None)
-                    except ReturnToMain:
+                    except EngineRecovery:
                         raise
                 else:
                     # exited cleanly
@@ -373,7 +378,7 @@ def main():
     while not Job_finish:
         try:
             Job_finish = init_launcher(args)
-        except ReturnToMain:
+        except EngineRecovery:
             Job_finish = False
 
 if __name__ == "__main__":
